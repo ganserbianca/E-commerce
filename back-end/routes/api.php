@@ -11,11 +11,10 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-// IDs numéricos
 Route::pattern('id', '[0-9]+');
 Route::pattern('productId', '[0-9]+');
 
-// ROTAS PÚBLICAS
+//Rotas públicas
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -35,25 +34,22 @@ Route::apiResource('publicos', AudienceController::class)
     ->only(['index', 'show'])
     ->parameters(['publicos' => 'id']);
 
-// USUÁRIOS AUTENTICADOS
+
+//Rotas autenticadas
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
 
-
-    // CARRINHO
     Route::get('/carrinho', [CartController::class, 'index']);
     Route::post('/carrinho/itens', [CartController::class, 'store']);
     Route::patch('/carrinho/itens/{productId}', [CartController::class, 'update']);
     Route::delete('/carrinho/itens/{productId}', [CartController::class, 'destroy']);
 
 
-    // ENDEREÇOS
     Route::apiResource('enderecos', AddressController::class)
         ->parameters(['enderecos' => 'id'])
         ->only(['index', 'show', 'store', 'update', 'destroy']);
 
-    // PEDIDOS
     Route::apiResource('pedidos', OrderController::class)
         ->only(['index', 'show', 'store'])
         ->parameters(['pedidos' => 'id']);
@@ -61,13 +57,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/pedidos/{id}', [OrderController::class, 'cancel']);
     Route::post('/pedidos/{id}/pay', [OrderController::class, 'pay']);
 
-    // PERFIL
     Route::get('/perfil', [UserController::class, 'profile']);
     Route::put('/perfil', [UserController::class, 'updateProfile']);
     Route::patch('/perfil/senha', [UserController::class, 'updatePassword']);
 });
 
-// ADMINISTRADORES
+//Rota dos administradores
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
     Route::apiResource('produtos', ProductController::class)
