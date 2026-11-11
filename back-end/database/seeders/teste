@@ -1,0 +1,110 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Seeder;
+use RuntimeException;
+
+class AdminUserSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $email = env('ADMIN_EMAIL');
+        $password = env('ADMIN_PASSWORD');
+
+        if (!$email || !$password) {
+            throw new RuntimeException(
+                'Defina ADMIN_EMAIL e ADMIN_PASSWORD no .env'
+            );
+        }
+
+        User::updateOrCreate(
+            ['email' => $email],
+            [
+                'name' => 'Administrador',
+                'password' => $password,
+                'type_user' => 'admin',
+            ]
+        );
+    }
+}
+
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Audience;
+use Illuminate\Database\Seeder;
+
+class AudienceSeeder extends Seeder
+{
+    public function run(): void
+    {
+        Audience::firstOrCreate(['name' => 'Adulto']);
+        Audience::firstOrCreate(['name' => 'Infantil']);
+    }
+}
+
+
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Brand;
+use Illuminate\Database\Seeder;
+
+class BrandSeeder extends Seeder
+{
+    public function run(): void
+    {
+        Brand::firstOrCreate(
+            ['name' => 'Ótica própria'],
+            ['description' => 'Marca da loja']
+        );
+    }
+}
+
+
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Category;
+use Illuminate\Database\Seeder;
+
+class CategorySeeder extends Seeder
+{
+    public function run(): void
+    {
+        Category::firstOrCreate(
+            ['name' => 'Decoração'],
+            ['description' => 'Produtos decorativos']
+        );
+
+        Category::firstOrCreate(
+            ['name' => 'Acessórios'],
+            ['description' => 'Acessórios diversos']
+        );
+    }
+}
+
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $this->call([
+            AdminUserSeeder::class,
+            CategorySeeder::class,
+            BrandSeeder::class,
+            AudienceSeeder::class,
+        ]);
+    }
+}
+
