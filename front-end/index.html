@@ -1,0 +1,396 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lume Ótica | Sua visão, seu estilo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#inicio">
+                <span class="brand-symbol">◉</span> LUME <small>ÓTICA</small>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav" aria-expanded="false" aria-label="Abrir menu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <nav class="collapse navbar-collapse" id="nav">
+                <div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                    <a class="nav-link" href="#inicio">Início</a>
+                    <a class="nav-link" href="#produtos">Óculos</a>
+                    <a class="nav-link d-none" href="#pedidos" data-auth-only>Meus pedidos</a>
+                    <a class="nav-link d-none" href="#admin" data-admin-only>Administração</a>
+                    <a class="nav-link" href="#perfil">
+                        <i class="bi bi-person"></i> Minha conta
+                    </a>
+                    <a class="nav-link position-relative" href="#carrinho">
+                        <i class="bi bi-bag"></i> Carrinho
+                        <span id="cart-count" class="badge rounded-pill text-bg-dark">0</span>
+                    </a>
+                    <button id="logout-btn" type="button" class="btn btn-sm btn-outline-dark d-none">Sair</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- INÍCIO -->
+        <section id="inicio" class="hero">
+            <div class="container py-5">
+                <div class="row align-items-center g-4">
+                    <div class="col-lg-7">
+                        <div class="eyebrow mb-3">UMA NOVA FORMA DE VER O MUNDO</div>
+                        <h1>Encontre o olhar que <em>combina com você.</em></h1>
+                        <p class="lead mt-3">
+                            Armações, estilo e conforto em um só lugar.
+                            Explore nossa coleção e escolha seus favoritos.
+                        </p>
+                        <a href="#produtos" class="btn btn-dark btn-lg mt-3 px-4">
+                            Explorar coleção <i class="bi bi-arrow-right"></i>
+                        </a>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="hero-art">
+                            <div class="hero-ring"></div>
+                            <div class="glasses">◉—◉</div>
+                            <span>SEU ESTILO. SUA VISÃO.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PRODUTOS -->
+        <section id="produtos" class="container py-5">
+            <div class="section-heading">
+                <div class="eyebrow">ESCOLHAS ESPECIAIS</div>
+                <h2>Nossa coleção</h2>
+                <p class="text-secondary">Todos os produtos cadastrados na loja.</p>
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-md-5">
+                    <input id="search" type="search" class="form-control form-control-lg" placeholder="Buscar por nome ou descrição..." aria-label="Buscar produtos">
+                </div>
+                <div class="col-md-3">
+                    <select id="filter-brand" class="form-select form-select-lg" aria-label="Filtrar por marca">
+                        <option value="">Todas as marcas</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="filter-audience" class="form-select form-select-lg" aria-label="Filtrar por público">
+                        <option value="">Todos os públicos</option>
+                    </select>
+                </div>
+            </div>
+            <div id="products-grid" class="row g-4"></div>
+        </section>
+
+        <!-- CARRINHO -->
+        <section id="carrinho" class="container py-5">
+            <div class="eyebrow">SUAS ESCOLHAS</div>
+            <h2>Meu carrinho</h2>
+            <div id="cart-content"></div>
+        </section>
+
+        <!-- PERFIL -->
+        <section id="perfil" class="container py-5">
+            <div class="eyebrow">MINHA CONTA</div>
+            <h2>Perfil e endereços</h2>
+
+            <div id="guest-account" class="card border-0 shadow-sm p-4">
+                <h4>Entre para gerenciar seus dados</h4>
+                <p class="text-secondary">
+                    Você pode explorar produtos e montar seu carrinho sem entrar.
+                    Para salvar seu perfil, endereços e finalizar pedidos, faça login.
+                </p>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-dark" data-open-auth="login">Entrar</button>
+                    <button type="button" class="btn btn-outline-dark" data-open-auth="register">Criar conta</button>
+                </div>
+            </div>
+
+            <div id="account-content" class="d-none">
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <div class="card panel p-4">
+                            <h4>Meus dados</h4>
+                            <form id="profile-form">
+                                <label for="profile-name" class="form-label mt-3">Nome</label>
+                                <input id="profile-name" name="name" type="text" class="form-control" required>
+
+                                <label for="profile-email" class="form-label mt-3">E-mail</label>
+                                <input id="profile-email" name="email" type="email" class="form-control" required>
+
+                                <button type="submit" class="btn btn-dark mt-3">Salvar perfil</button>
+                            </form>
+                        </div>
+
+                        <div class="card panel p-4 mt-4">
+                            <h4>Alterar senha</h4>
+                            <form id="password-form">
+                                <label for="current-password" class="form-label mt-3">Senha atual</label>
+                                <input id="current-password" name="current_password" type="password" class="form-control" autocomplete="current-password" required>
+
+                                <label for="new-password" class="form-label mt-3">Nova senha</label>
+                                <input id="new-password" name="password" type="password" minlength="8" class="form-control" autocomplete="new-password" required>
+
+                                <label for="confirm-password" class="form-label mt-3">Confirmar nova senha</label>
+                                <input id="confirm-password" name="password_confirmation" type="password" class="form-control" autocomplete="new-password" required>
+
+                                <button type="submit" class="btn btn-outline-dark mt-3">Alterar senha</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-6">
+                        <div class="card panel p-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h4>Meus endereços</h4>
+                                <button id="new-address" type="button" class="btn btn-sm btn-dark">+ Novo</button>
+                            </div>
+                            <div id="addresses-list" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PEDIDOS -->
+        <section id="pedidos" class="container py-5">
+            <div class="eyebrow">ACOMPANHE SUAS COMPRAS</div>
+            <h2>Meus pedidos</h2>
+            <div id="orders-content"></div>
+        </section>
+
+        <!-- ADMINISTRAÇÃO -->
+        <section id="admin" class="container py-5 d-none">
+            <div class="eyebrow">GESTÃO DA LOJA</div>
+            <h2>Painel administrativo</h2>
+            <div class="alert alert-light border">
+                Acesso protegido pelo middleware <code>admin</code> do Laravel.
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="card panel p-4">
+                        <h4>Cadastrar produto</h4>
+                        <form id="product-form" class="row g-3 mt-1">
+                            <div class="col-12">
+                                <label for="product-name" class="form-label">Nome</label>
+                                <input id="product-name" name="name" type="text" class="form-control" required>
+                            </div>
+
+                            <div class="col-12">
+                                <label for="product-description" class="form-label">Descrição</label>
+                                <textarea id="product-description" name="description" class="form-control" rows="2"></textarea>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="product-price" class="form-label">Preço</label>
+                                <input id="product-price" name="price" type="number" step="0.01" min="0" class="form-control" required>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="product-stock" class="form-label">Estoque</label>
+                                <input id="product-stock" name="stock_quantity" type="number" step="1" min="0" class="form-control" required>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="product-brand" class="form-label">Marca</label>
+                                <select id="product-brand" name="brand_id" class="form-select" required></select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="product-category" class="form-label">Categoria</label>
+                                <select id="product-category" name="category_id" class="form-select" required></select>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">Públicos-alvo</label>
+                                <div id="product-audiences" class="d-flex gap-3 flex-wrap"></div>
+                            </div>
+
+                            <div class="col-12">
+                                <label for="product-image" class="form-label">URL da imagem</label>
+                                <input id="product-image" name="image" type="url" class="form-control" placeholder="https://...">
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-check-label">
+                                    <input name="available" type="checkbox" class="form-check-input" checked>
+                                    Produto disponível
+                                </label>
+                            </div>
+
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-dark">Cadastrar produto</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="col-lg-5">
+                    <div class="card panel p-4 mb-4">
+                        <h4>Nova marca</h4>
+                        <form id="brand-form">
+                            <input name="name" type="text" class="form-control my-2" placeholder="Nome da marca" aria-label="Nome da marca" required>
+                            <input name="description" type="text" class="form-control my-2" placeholder="Descrição (opcional)" aria-label="Descrição da marca">
+                            <button type="submit" class="btn btn-dark">Cadastrar marca</button>
+                        </form>
+                    </div>
+
+                    <div class="card panel p-4 mb-4">
+                        <h4>Novo público-alvo</h4>
+                        <form id="audience-form">
+                            <input name="name" type="text" class="form-control my-2" placeholder="Ex.: Feminino, Masculino, Infantil" aria-label="Nome do público-alvo" required>
+                            <button type="submit" class="btn btn-dark">Cadastrar público</button>
+                        </form>
+                    </div>
+
+                    <div class="card panel p-4">
+                        <h4>Nova categoria</h4>
+                        <form id="category-form">
+                            <input name="name" type="text" class="form-control my-2" placeholder="Nome da categoria" aria-label="Nome da categoria" required>
+                            <input name="description" type="text" class="form-control my-2" placeholder="Descrição (opcional)" aria-label="Descrição da categoria">
+                            <button type="submit" class="btn btn-dark">Cadastrar categoria</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card panel p-4 mt-4">
+                <h4>Atualizar status de pedido</h4>
+                <form id="status-form" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="status-order-id" class="form-label">ID do pedido</label>
+                        <input id="status-order-id" name="id" type="number" min="1" step="1" class="form-control" required>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="order-status" class="form-label">Novo status</label>
+                        <select id="order-status" name="status" class="form-select">
+                            <option value="sent">Enviado</option>
+                            <option value="delivered">Entregue</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-dark w-100">Atualizar status</button>
+                    </div>
+                </form>
+                <small class="text-secondary mt-2">
+                    O Laravel permite apenas: paid → sent → delivered.
+                </small>
+            </div>
+        </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="py-4 border-top">
+        <div class="container d-flex justify-content-between flex-wrap gap-2">
+            <strong>◉ LUME ÓTICA</strong>
+            <span class="text-secondary">Sua visão, seu estilo.</span>
+        </div>
+    </footer>
+
+    <!-- MODAL DE LOGIN E CADASTRO -->
+    <div class="modal fade" id="auth-modal" tabindex="-1" aria-labelledby="auth-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0">
+                <div class="modal-header border-0">
+                    <h4 class="modal-title" id="auth-title">Entrar</h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="auth-form">
+                        <div id="auth-name-field" class="d-none mb-3">
+                            <label for="auth-name" class="form-label">Nome</label>
+                            <input id="auth-name" name="name" type="text" class="form-control" autocomplete="name">
+                        </div>
+
+                        <label for="auth-email" class="form-label">E-mail</label>
+                        <input id="auth-email" name="email" type="email" class="form-control mb-3" autocomplete="email" required>
+
+                        <label for="auth-password" class="form-label">Senha</label>
+                        <input id="auth-password" name="password" type="password" minlength="8" class="form-control" autocomplete="current-password" required>
+
+                        <button id="auth-submit" type="submit" class="btn btn-dark w-100 mt-4">Entrar</button>
+                    </form>
+                    <button id="auth-toggle" type="button" class="btn btn-link text-dark mt-2">
+                        Ainda não tem conta? Cadastre-se
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE ENDEREÇO -->
+    <div class="modal fade" id="address-modal" tabindex="-1" aria-labelledby="address-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0">
+                <div class="modal-header">
+                    <h5 id="address-modal-title" class="modal-title">Cadastrar endereço</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+
+                <form id="address-form">
+                    <div class="modal-body row g-3">
+                        <div class="col-md-5">
+                            <label for="address-cep" class="form-label">CEP</label>
+                            <input id="address-cep" name="cep" type="text" class="form-control" maxlength="9" required>
+                        </div>
+
+                        <div class="col-md-7">
+                            <label for="address-street" class="form-label">Rua</label>
+                            <input id="address-street" name="street" type="text" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="address-number" class="form-label">Número</label>
+                            <input id="address-number" name="number" type="text" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label for="address-complement" class="form-label">Complemento</label>
+                            <input id="address-complement" name="complement" type="text" class="form-control">
+                        </div>
+
+                        <div class="col-12">
+                            <label for="address-neighborhood" class="form-label">Bairro</label>
+                            <input id="address-neighborhood" name="neighborhood" type="text" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label for="address-city" class="form-label">Cidade</label>
+                            <input id="address-city" name="city" type="text" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="address-uf" class="form-label">UF</label>
+                            <input id="address-uf" name="uf" type="text" class="form-control" minlength="2" maxlength="2" required>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-dark">Salvar endereço</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICAÇÕES -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div id="toast-text" class="toast-body"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
