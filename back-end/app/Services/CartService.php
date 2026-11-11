@@ -20,7 +20,6 @@ class CartService
         private readonly TransactionRepository $transaction,
     ) {}
 
-    // Retorna o carrinho do usuário com seus produtos
     public function index(int $userId): Cart
     {
         $cart = $this->cartRepository->findOrCreateByUser($userId);
@@ -31,7 +30,9 @@ class CartService
     // Adiciona um produto ao carrinho
     public function addItem(int $userId, int $productId, int $quantity): Cart
     {
-        return $this->transaction->run(function () use ($userId, $productId, $quantity) {
+        return $this->transaction->run(function () use (
+        $userId, $productId, $quantity) {
+
             $product = $this->productRepository->findForUpdate($productId);
 
             if (!$product->available) {
@@ -39,10 +40,12 @@ class CartService
             }
 
             $cart = $this->cartRepository->findOrCreateByUser($userId);
+
             $item = $this->cartItemRepository
                 ->findByCartAndProduct($cart->id, $productId);
 
             $quantityInCart = $item?->quantity ?? 0;
+            
             $totalQuantity = $quantityInCart + $quantity;
 
             if ($totalQuantity > $product->stock_quantity) {
