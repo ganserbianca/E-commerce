@@ -27,6 +27,7 @@ class ProductService
         $audienceIds = $productData['audience_ids'] ?? null;
 
         unset($productData['audience_ids']);
+        // remove uma chave do array
 
         $product = $this->productRepository->create($productData);
 
