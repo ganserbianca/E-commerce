@@ -44,7 +44,12 @@ class OrderService
     public function checkout(int $userId, int $addressId): Order
     {
         return $this->transaction->run(function () use ($userId, $addressId) {
-            $address = $this->addressRepository->findByUser($userId, $addressId);
+
+            $address = $this->addressRepository->findByUser(
+                $userId,
+                $addressId
+            );
+
             $cart = $this->cartRepository->findByUserWithItems($userId);
 
             if (!$cart || $cart->items->isEmpty()) {
@@ -55,17 +60,23 @@ class OrderService
             $lines = [];
 
             foreach ($cart->items as $item) {
-                $product = $this->productRepository->findForUpdate($item->product_id);
+
+                $product = $this->productRepository->findForUpdate(
+                    $item->product_id
+                );
 
                 if (!$product->available) {
                     throw new ProductUnavailableException();
                 }
 
                 if ($item->quantity > $product->stock_quantity) {
-                    throw new InsufficientStockException($product->stock_quantity);
+                    throw new InsufficientStockException(
+                        $product->stock_quantity
+                    );
                 }
 
                 $totalAmount += (float) $product->price * $item->quantity;
+
                 $lines[] = [
                     'product' => $product,
                     'quantity' => $item->quantity,
@@ -73,10 +84,15 @@ class OrderService
             }
 
             $order = $this->orderRepository->create(
-                $this->buildOrderData($userId, $address, $totalAmount)
+                $this->buildOrderData(
+                    $userId,
+                    $address,
+                    $totalAmount
+                )
             );
 
             foreach ($lines as $line) {
+
                 $product = $line['product'];
 
                 $this->orderItemRepository->create([
@@ -99,16 +115,22 @@ class OrderService
         });
     }
 
+    // Cancela um pedido pendente
     public function cancel(int $userId, int $orderId): Order
     {
         return $this->transaction->run(function () use ($userId, $orderId) {
-            $order = $this->orderRepository->findByUserForUpdate($userId, $orderId);
+
+            $order = $this->orderRepository->findByUserForUpdate(
+                $userId,
+                $orderId
+            );
 
             if ($order->status !== 'pending') {
                 throw new OrderCannotBeCancelledException();
             }
 
             foreach ($order->items as $item) {
+
                 $product = $this->productRepository->findForUpdate(
                     $item->product_id
                 );
@@ -137,6 +159,7 @@ class OrderService
             $orderId,
             $method
         ) {
+
             $order = $this->orderRepository->findByUserForUpdate(
                 $userId,
                 $orderId
@@ -165,7 +188,11 @@ class OrderService
 
     public function updateStatus(int $orderId, string $status): Order
     {
-        return $this->transaction->run(function () use ($orderId, $status) {
+        return $this->transaction->run(function () use (
+            $orderId,
+            $status
+        ) {
+
             $order = $this->orderRepository->findForUpdate($orderId);
 
             $transitions = [
