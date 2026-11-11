@@ -1,0 +1,241 @@
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class AddressResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'cep' => $this->cep,
+            'street' => $this->street,
+            'number' => $this->number,
+            'complement' => $this->complement,
+            'neighborhood' => $this->neighborhood,
+            'city' => $this->city,
+            'uf' => $this->uf,
+        ];
+    }
+}
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class AudienceResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+        ];
+    }
+}
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class BrandResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+        ];
+    }
+}
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class CartItemResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'quantity' => $this->quantity,
+            'product' => new ProductResource(
+                $this->whenLoaded('product')
+            ),
+        ];
+    }
+}
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class CartResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'items' => CartItemResource::collection(
+                $this->whenLoaded('items')
+            ),
+        ];
+    }
+}
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class CategoryResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+        ];
+    }
+}
+
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class OrderItemResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    // OrderItemResource
+    public function toArray(Request $request): array
+    {
+        return [
+            'product_id'   => $this->product_id,
+            'product_name' => $this->product_name,
+            'price'        => (float) $this->price,
+            'quantity'     => $this->quantity,
+        ];    
+    }
+}
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class OrderResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    // OrderResource
+    public function toArray(Request $request): array
+    {
+        return [
+            'id'           => $this->id,
+            'status'       => $this->status,
+            'total_amount' => (float) $this->total_amount,
+            'ordered_at'   => $this->ordered_at,
+            'paid_at'      => $this->paid_at,
+            'address'      => [
+                'street'       => $this->order_street,
+                'number'       => $this->order_number,
+                'cep'          => $this->order_cep,
+                'neighborhood' => $this->order_neighborhood,
+                'city'         => $this->order_city,
+                'uf'           => $this->order_uf,
+                'complement'   => $this->order_complement,
+            ],
+            'items' => OrderItemResource::collection($this->whenLoaded('items')),
+        ];
+    }
+}
+
+<?php
+
+namespace App\Http\Resources;
+
+use App\Http\Resources\CategoryResource;
+use App\Http\Resources\BrandResource;
+use App\Http\Resources\AudienceResource;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ProductResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'price' => (float) $this->price,
+            'stock_quantity' => $this->stock_quantity,
+            'image' => $this->image,
+            'available' => $this->available,
+
+            'category' => new CategoryResource(
+                $this->whenLoaded('category')
+            ),
+
+            'brand' => new BrandResource(
+                $this->whenLoaded('brand')
+            ),
+
+            'audiences' => AudienceResource::collection(
+                $this->whenLoaded('audiences')
+            ),
+        ];
+    }
+}
+
+
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class UserResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'name' => $this->name,
+            'email' => $this->email,
+        ];
+    }
+}
