@@ -1,0 +1,661 @@
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreAddressRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'cep' => ['required', 'string', 'max:9'],
+            'street' => ['required', 'string', 'max:150'],
+            'number' => ['required', 'string', 'max:10'],
+            'complement' => ['nullable', 'string', 'max:100'],
+            'neighborhood' => ['required', 'string', 'max:255'],
+            'city' => ['required', 'string', 'max:150'],
+            'uf' => ['required', 'string', 'size:2'],
+        ];
+    }
+}
+
+<?php
+
+namespace App\Services;
+
+use App\Models\Audience;
+use App\Repositories\AudienceRepository;
+use Illuminate\Database\Eloquent\Collection;
+
+class AudienceService
+{
+    public function __construct(
+        private readonly AudienceRepository $audienceRepository
+    ) {}
+
+    public function index(): Collection
+    {
+        return $this->audienceRepository->index();
+    }
+
+    public function show(int $id): Audience
+    {
+        return $this->audienceRepository->find($id);
+    }
+
+    public function create(array $audienceData): Audience
+    {
+        return $this->audienceRepository->create($audienceData);
+    }
+
+    public function update(int $id, array $audienceData): Audience
+    {
+        return $this->audienceRepository->update($id, $audienceData);
+    }
+
+    public function delete(int $id): bool
+    {
+        return $this->audienceRepository->delete($id);
+    }
+}
+
+<?php
+
+namespace App\Services;
+
+use App\Models\User;
+use App\Repositories\UserRepository;
+use App\Exceptions\InvalidCredentialsException;
+use App\Exceptions\TooManyLoginAttemptsException;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+
+class AuthService
+{
+    private UserRepository $userRepository;
+
+    public function __construct(UserRepository $userRepository)
+    {
+        $this->userRepository = $userRepository;
+    }
+
+    public function register(array $dados): User
+    {
+        $dados['password'] = Hash::make($dados['password']);
+
+        return $this->userRepository->create($dados);
+    }
+
+    public function login(string $email, string $password, string $ip): User
+    {
+        $chave = Str::lower($email) . '|' . $ip;
+
+        if (RateLimiter::tooManyAttempts($chave, 5)) {
+            throw new TooManyLoginAttemptsException();
+        }
+
+        $user = $this->userRepository->findByEmail($email);
+
+        if (!$user || !Hash::check($password, $user->password)) {
+            RateLimiter::hit($chave, 60);
+
+            throw new InvalidCredentialsException();
+        }
+
+        RateLimiter::clear($chave);
+
+        Auth::guard('web')->login($user);
+
+        request()->session()->regenerate();
+
+        return $user;
+    }
+
+    public function logout(): void
+    {
+        Auth::guard('web')->logout();
+
+        request()->session()->invalidate();
+        request()->session()->regenerateToken();
+    }
+}
+
+<?php
+
+namespace App\Services;
+
+use App\Models\Brand;
+use App\Repositories\BrandRepository;
+use Illuminate\Database\Eloquent\Collection;
+
+class BrandService
+{
+    public function __construct(
+        private readonly BrandRepository $brandRepository
+    ) {}
+
+    public function index(): Collection
+    {
+        return $this->brandRepository->index();
+    }
+
+    public function show(int $id): Brand
+    {
+        return $this->brandRepository->find($id);
+    }
+
+    public function create(array $brandData): Brand
+    {
+        return $this->brandRepository->create($brandData);
+    }
+
+    public function update(int $id, array $brandData): Brand
+    {
+        return $this->brandRepository->update($id, $brandData);
+    }
+
+    public function delete(int $id): bool
+    {
+        return $this->brandRepository->delete($id);
+    }
+}
+
+<?php
+
+namespace App\Services;
+
+use App\Exceptions\InsufficientStockException;
+use App\Exceptions\ProductNotInCartException;
+use App\Exceptions\ProductUnavailableException;
+use App\Models\Cart;
+use App\Repositories\CartItemRepository;
+use App\Repositories\CartRepository;
+use App\Repositories\ProductRepository;
+use App\Repositories\TransactionRepository;
+
+class CartService
+{
+    public function __construct(
+        private readonly CartRepository $cartRepository,
+        private readonly CartItemRepository $cartItemRepository,
+        private readonly ProductRepository $productRepository,
+        private readonly TransactionRepository $transaction,
+    ) {}
+
+    // Retorna o carrinho do usuário com seus produtos
+    public function index(int $userId): Cart
+    {
+        $cart = $this->cartRepository->findOrCreateByUser($userId);
+
+        return $this->cartRepository->loadItems($cart);
+    }
+
+    // Adiciona um produto ao carrinho
+    public function addItem(int $userId, int $productId, int $quantity): Cart
+    {
+        return $this->transaction->run(function () use ($userId, $productId, $quantity) {
+            $product = $this->productRepository->findForUpdate($productId);
+
+            if (!$product->available) {
+                throw new ProductUnavailableException();
+            }
+
+            $cart = $this->cartRepository->findOrCreateByUser($userId);
+            $item = $this->cartItemRepository
+                ->findByCartAndProduct($cart->id, $productId);
+
+            $quantityInCart = $item?->quantity ?? 0;
+            $totalQuantity = $quantityInCart + $quantity;
+
+            if ($totalQuantity > $product->stock_quantity) {
+                throw new InsufficientStockException(
+                    max(0, $product->stock_quantity - $quantityInCart)
+                );
+            }
+
+            if ($item) {
+                $this->cartItemRepository->update($item->id, [
+                    'quantity' => $totalQuantity,
+                ]);
+            } else {
+                $this->cartItemRepository->create([
+                    'cart_id'    => $cart->id,
+                    'product_id' => $productId,
+                    'quantity'   => $quantity,
+                ]);
+            }
+
+            return $this->cartRepository->loadItems($cart);
+        });
+    }
+
+    // Atualiza a quantidade (zero remove o produto)
+    public function updateItem(int $userId, int $productId, int $quantity): Cart
+    {
+        return $this->transaction->run(function () use ($userId, $productId, $quantity) {
+            $cart = $this->cartRepository->findOrCreateByUser($userId);
+            $item = $this->cartItemRepository
+                ->findByCartAndProduct($cart->id, $productId)
+                ?? throw new ProductNotInCartException();
+
+            if ($quantity === 0) {
+                $this->cartItemRepository->delete($item->id);
+
+                return $this->cartRepository->loadItems($cart);
+            }
+
+            $product = $this->productRepository->findForUpdate($productId);
+
+            if (!$product->available) {
+                throw new ProductUnavailableException();
+            }
+
+            if ($quantity > $product->stock_quantity) {
+                throw new InsufficientStockException($product->stock_quantity);
+            }
+
+            $this->cartItemRepository->update($item->id, [
+                'quantity' => $quantity,
+            ]);
+
+            return $this->cartRepository->loadItems($cart);
+        });
+    }
+
+    // Remove o produto do carrinho
+    public function removeItem(int $userId, int $productId): Cart
+    {
+        return $this->updateItem($userId, $productId, 0);
+    }
+}
+
+<?php
+
+namespace App\Services;
+
+use App\Models\Category;
+use App\Repositories\CategoryRepository;
+use Illuminate\Database\Eloquent\Collection;
+
+class CategoryService
+{
+    public function __construct(
+        private readonly CategoryRepository $categoryRepository
+    ) {}
+
+    public function index(): Collection
+    {
+        return $this->categoryRepository->index();
+    }
+
+    public function show(int $id): Category
+    {
+        return $this->categoryRepository->find($id);
+    }
+
+    public function create(array $categoryData): Category
+    {
+        return $this->categoryRepository->create($categoryData);
+    }
+
+    public function update(int $id, array $categoryData): Category
+    {
+        return $this->categoryRepository->update($id, $categoryData);
+    }
+
+    public function delete(int $id): bool
+    {
+        return $this->categoryRepository->delete($id);
+    }
+}
+
+
+<?php
+
+namespace App\Services;
+
+use App\Exceptions\EmptyCartException;
+use App\Exceptions\InsufficientStockException;
+use App\Exceptions\InvalidOrderStatusException;
+use App\Exceptions\OrderCannotBeCancelledException;
+use App\Exceptions\OrderNotPendingException;
+use App\Exceptions\ProductUnavailableException;
+use App\Models\Address;
+use App\Models\Order;
+use App\Repositories\AddressRepository;
+use App\Repositories\CartRepository;
+use App\Repositories\OrderItemRepository;
+use App\Repositories\OrderRepository;
+use App\Repositories\PaymentRepository;
+use App\Repositories\ProductRepository;
+use App\Repositories\TransactionRepository;
+use Illuminate\Database\Eloquent\Collection;
+
+class OrderService
+{
+    public function __construct(
+        private readonly OrderRepository $orderRepository,
+        private readonly OrderItemRepository $orderItemRepository,
+        private readonly AddressRepository $addressRepository,
+        private readonly CartRepository $cartRepository,
+        private readonly ProductRepository $productRepository,
+        private readonly PaymentRepository $paymentRepository,
+        private readonly TransactionRepository $transaction,
+    ) {}
+
+    public function index(int $userId): Collection
+    {
+        return $this->orderRepository->indexByUser($userId);
+    }
+
+    public function show(int $userId, int $orderId): Order
+    {
+        return $this->orderRepository->findByUser($userId, $orderId);
+    }
+
+    public function checkout(int $userId, int $addressId): Order
+    {
+        return $this->transaction->run(function () use ($userId, $addressId) {
+            $address = $this->addressRepository->findByUser($userId, $addressId);
+            $cart = $this->cartRepository->findByUserWithItems($userId);
+
+            if (!$cart || $cart->items->isEmpty()) {
+                throw new EmptyCartException();
+            }
+
+            $totalAmount = 0.0;
+            $lines = [];
+
+            foreach ($cart->items as $item) {
+                $product = $this->productRepository->findForUpdate($item->product_id);
+
+                if (!$product->available) {
+                    throw new ProductUnavailableException();
+                }
+
+                if ($item->quantity > $product->stock_quantity) {
+                    throw new InsufficientStockException($product->stock_quantity);
+                }
+
+                $totalAmount += (float) $product->price * $item->quantity;
+                $lines[] = [
+                    'product' => $product,
+                    'quantity' => $item->quantity,
+                ];
+            }
+
+            $order = $this->orderRepository->create(
+                $this->buildOrderData($userId, $address, $totalAmount)
+            );
+
+            foreach ($lines as $line) {
+                $product = $line['product'];
+
+                $this->orderItemRepository->create([
+                    'order_id' => $order->id,
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'price' => $product->price,
+                    'quantity' => $line['quantity'],
+                ]);
+
+                $this->productRepository->decrementStock(
+                    $product,
+                    $line['quantity']
+                );
+            }
+
+            $this->cartRepository->clearItems($cart);
+
+            return $this->orderRepository->loadItems($order);
+        });
+    }
+
+    public function cancel(int $userId, int $orderId): Order
+    {
+        return $this->transaction->run(function () use ($userId, $orderId) {
+            $order = $this->orderRepository->findByUserForUpdate($userId, $orderId);
+
+            if ($order->status !== 'pending') {
+                throw new OrderCannotBeCancelledException();
+            }
+
+            foreach ($order->items as $item) {
+                $product = $this->productRepository->findForUpdate(
+                    $item->product_id
+                );
+
+                $this->productRepository->incrementStock(
+                    $product,
+                    $item->quantity
+                );
+            }
+
+            $order = $this->orderRepository->update($order->id, [
+                'status' => 'cancelled',
+            ]);
+
+            return $this->orderRepository->loadItems($order);
+        });
+    }
+
+    public function pay(
+        int $userId,
+        int $orderId,
+        string $method
+    ): Order {
+        return $this->transaction->run(function () use (
+            $userId,
+            $orderId,
+            $method
+        ) {
+            $order = $this->orderRepository->findByUserForUpdate(
+                $userId,
+                $orderId
+            );
+
+            if ($order->status !== 'pending') {
+                throw new OrderNotPendingException();
+            }
+
+            $this->paymentRepository->create([
+                'order_id' => $order->id,
+                'method' => $method,
+                'status' => 'approved',
+                'price' => $order->total_amount,
+                'transaction_code' => 'SIM-' . uniqid(),
+            ]);
+
+            $order = $this->orderRepository->update($order->id, [
+                'status' => 'paid',
+                'paid_at' => now(),
+            ]);
+
+            return $this->orderRepository->loadItems($order);
+        });
+    }
+
+    public function updateStatus(int $orderId, string $status): Order
+    {
+        return $this->transaction->run(function () use ($orderId, $status) {
+            $order = $this->orderRepository->findForUpdate($orderId);
+
+            $transitions = [
+                'paid' => 'sent',
+                'sent' => 'delivered',
+            ];
+
+            if (($transitions[$order->status] ?? null) !== $status) {
+                throw new InvalidOrderStatusException();
+            }
+
+            return $this->orderRepository->update($order->id, [
+                'status' => $status,
+            ]);
+        });
+    }
+
+    private function buildOrderData(
+        int $userId,
+        Address $address,
+        float $totalAmount
+    ): array {
+        return [
+            'user_id' => $userId,
+            'address_id' => $address->id,
+            'status' => 'pending',
+            'total_amount' => $totalAmount,
+            'ordered_at' => now(),
+            'order_street' => $address->street,
+            'order_number' => $address->number,
+            'order_cep' => $address->cep,
+            'order_neighborhood' => $address->neighborhood,
+            'order_city' => $address->city,
+            'order_uf' => $address->uf,
+            'order_complement' => $address->complement,
+        ];
+    }
+}
+
+
+<?php
+
+namespace App\Services;
+
+use App\Models\Product;
+use App\Repositories\ProductRepository;
+use Illuminate\Database\Eloquent\Collection;
+
+class ProductService
+{
+    public function __construct(
+        private readonly ProductRepository $productRepository
+    ) {}
+
+    public function index(): Collection
+    {
+        return $this->productRepository->index();
+    }
+
+    public function show(int $id): Product
+    {
+        return $this->productRepository->find($id);
+    }
+
+    public function create(array $productData): Product
+    {
+        $audienceIds = $productData['audience_ids'] ?? null;
+
+        unset($productData['audience_ids']);
+
+        $product = $this->productRepository->create($productData);
+
+        if ($audienceIds !== null) {
+            $this->productRepository->syncAudiences(
+                $product,
+                $audienceIds
+            );
+        }
+
+        return $this->show($product->id);
+    }
+
+    public function update(int $id, array $productData): Product
+    {
+        $syncAudiences = array_key_exists(
+            'audience_ids',
+            $productData
+        );
+
+        $audienceIds = $productData['audience_ids'] ?? [];
+
+        unset($productData['audience_ids']);
+
+        $product = $this->productRepository->update(
+            $id,
+            $productData
+        );
+
+        if ($syncAudiences) {
+            $this->productRepository->syncAudiences(
+                $product,
+                $audienceIds
+            );
+        }
+
+        return $this->show($product->id);
+    }
+
+    public function delete(int $id): bool
+    {
+        return $this->productRepository->delete($id);
+    }
+}
+
+<?php
+
+namespace App\Services;
+
+use App\Models\User;
+use App\Repositories\UserRepository;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Database\Eloquent\Collection;
+
+class UserService
+{
+    private UserRepository $userRepository;
+
+    public function __construct(UserRepository $userRepository)
+    {
+        $this->userRepository = $userRepository;
+    }
+
+    public function index(): Collection
+    {
+        return $this->userRepository->index();
+    }
+
+    public function show(int $id): User
+    {
+        return $this->userRepository->find($id);
+    }
+
+    public function create(array $userData): User
+    {
+        return $this->userRepository->create($userData);
+    }
+
+    public function update(int $id, array $userData): User
+    {
+        return $this->userRepository->update($id, $userData);
+    }
+
+    public function delete(int $id): bool
+    {
+        return $this->userRepository->delete($id);
+    }
+
+    public function updatePassword(
+        int $id,
+        string $currentPassword,
+        string $newPassword
+    ): User {
+        $user = $this->userRepository->find($id);
+
+        if (!Hash::check($currentPassword, $user->password)) {
+            abort(422, 'A senha atual está incorreta.');
+        }
+
+        return $this->userRepository->update($id, [
+            'password' => Hash::make($newPassword),
+        ]);
+    }
+}
