@@ -1,0 +1,40 @@
+FROM composer:2 AS dependencies
+
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-interaction \
+    --prefer-dist \
+    --no-progress \
+    --optimize-autoloader
+
+FROM dunglas/frankenphp:1-php8.4
+
+RUN install-php-extensions pdo_mysql opcache
+
+WORKDIR /app
+
+COPY --chown=www-data:www-data . /app
+
+COPY --from=dependencies --chown=www-data:www-data \
+    /app/vendor /app/vendor
+
+RUN printf ':80 {\n root * /app/public\n encode zstd gzip\n php_server\n}\n' > /etc/caddy/Caddyfile \
+    && mkdir -p storage/framework/cache/data \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R ug+rwX storage bootstrap/cache
+
+ENV APP_ENV=production \
+    APP_DEBUG=false \
+    SERVER_NAME=:80
+
+EXPOSE 80
+
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
