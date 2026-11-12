@@ -1,0 +1,1827 @@
+openapi: 3.0.3
+info:
+  title: API Lume Ótica
+  version: 1.0.0
+  description: |
+    API HTTP JSON da Lume Ótica. Os recursos de coleção usam `data` como uma
+    lista simples; não há paginação implementada.
+
+    A autenticação de primeira parte é baseada em sessão Laravel/Sanctum
+    (guard `web`), cookies e CSRF. Não há autenticação Bearer documentada.
+    O Swagger UI envia cookies e, antes de operações que alteram dados,
+    solicita `/sanctum/csrf-cookie` e envia o cookie `XSRF-TOKEN` no cabeçalho
+    `X-XSRF-TOKEN`. Faça login em `POST /api/login` para usar as rotas privadas.
+servers:
+  - url: /
+    description: Mesmo host do Swagger UI (proxy local em http://localhost:8080)
+tags:
+  - name: Autenticação
+    description: Cadastro, login e encerramento da sessão.
+  - name: Produtos
+    description: Consulta pública; operações de escrita para administradores.
+  - name: Categorias
+    description: Consulta pública; operações de escrita para administradores.
+  - name: Marcas
+    description: Consulta pública; operações de escrita para administradores.
+  - name: Públicos
+    description: Consulta pública; operações de escrita para administradores.
+  - name: Carrinho
+    description: Requer sessão autenticada.
+  - name: Endereços
+    description: Requer sessão autenticada; cada usuário acessa apenas os próprios endereços.
+  - name: Pedidos
+    description: Requer sessão autenticada, exceto a atualização administrativa de status.
+  - name: Perfil
+    description: Requer sessão autenticada.
+paths:
+  /api/register:
+    post:
+      tags: [Autenticação]
+      summary: Criar conta de cliente
+      description: Público. `type_user` não é aceito pelo corpo; novas contas usam o padrão `customer`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              válido:
+                value:
+                  name: Ana Silva
+                  email: ana@example.com
+                  password: senha-segura-123
+              inválido:
+                summary: E-mail existente e senha curta
+                value:
+                  name: Ana Silva
+                  email: cliente@example.com
+                  password: curta
+      responses:
+        '201':
+          description: Conta criada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDataResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/login:
+    post:
+      tags: [Autenticação]
+      summary: Iniciar sessão
+      description: Público. Login por sessão; em caso de sucesso, a aplicação regenera a sessão e envia o cookie de sessão.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: ana@example.com
+              password: senha-segura-123
+      responses:
+        '200':
+          description: Login concluído.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Credenciais inválidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: E-mail ou senha incorretos.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          description: Mais de cinco tentativas de login para o e-mail e IP dentro da janela de limitação.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Muitas tentativas de login. Tente novamente mais tarde.
+  /api/logout:
+    post:
+      tags: [Autenticação]
+      summary: Encerrar sessão
+      description: Requer sessão autenticada. Invalida a sessão e regenera o token CSRF.
+      responses:
+        '200':
+          description: Sessão encerrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Logout realizado com sucesso!
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /sanctum/csrf-cookie:
+    get:
+      tags: [Autenticação]
+      summary: Inicializar cookie CSRF do Sanctum
+      description: |
+        Rota do Sanctum usada pelo Swagger UI antes de requisições que alteram
+        dados. Envia cookies de sessão e `XSRF-TOKEN`; não requer login.
+      responses:
+        '204':
+          description: Cookies CSRF definidos; resposta sem corpo.
+  /api/produtos:
+    get:
+      tags: [Produtos]
+      summary: Listar produtos
+      description: Público. Retorna todos os produtos sem paginação; as relações não são carregadas nesta listagem.
+      responses:
+        '200':
+          description: Lista de produtos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductCollectionResponse'
+    post:
+      tags: [Produtos]
+      summary: Cadastrar produto
+      description: Requer sessão autenticada e privilégio administrativo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreateRequest'
+            example:
+              category_id: 1
+              brand_id: 1
+              name: Óculos de sol
+              description: Armação preta
+              price: 299.9
+              stock_quantity: 10
+              image: /images/oculos.jpg
+              available: true
+              audience_ids: [1, 2]
+      responses:
+        '201':
+          description: Produto cadastrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/produtos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Produtos]
+      summary: Consultar produto
+      description: Público. Nesta operação as relações de categoria, marca e públicos são carregadas.
+      responses:
+        '200':
+          description: Produto encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDataResponse'
+        '404':
+          description: Produto não encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Produto não encontrado.
+    put:
+      tags: [Produtos]
+      summary: Atualizar produto
+      description: Requer sessão autenticada e privilégio administrativo. Os campos são opcionais; `audience_ids` substitui a relação quando enviado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+            example:
+              price: 279.9
+              audience_ids: []
+      responses:
+        '200':
+          description: Produto atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Produtos]
+      summary: Atualizar produto parcialmente
+      description: Requer sessão autenticada e privilégio administrativo. Os campos são opcionais; `audience_ids` substitui a relação quando enviado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+            example:
+              price: 279.9
+      responses:
+        '200':
+          description: Produto atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Produtos]
+      summary: Excluir produto
+      description: Requer sessão autenticada e privilégio administrativo.
+      responses:
+        '200':
+          description: Produto excluído.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Produto excluído com sucesso.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/categorias:
+    get:
+      tags: [Categorias]
+      summary: Listar categorias
+      description: Público; coleção sem paginação.
+      responses:
+        '200':
+          description: Lista de categorias.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryCollectionResponse'
+    post:
+      tags: [Categorias]
+      summary: Cadastrar categoria
+      description: Requer sessão autenticada e privilégio administrativo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedDescriptionCreateRequest'
+            example:
+              name: Óculos de sol
+              description: Modelos para uso externo
+      responses:
+        '201':
+          description: Categoria cadastrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/categorias/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Categorias]
+      summary: Consultar categoria
+      description: Público.
+      responses:
+        '200':
+          description: Categoria encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDataResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Categorias]
+      summary: Atualizar categoria
+      description: Requer sessão autenticada e privilégio administrativo. Campos opcionais; o nome deve ser único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedDescriptionUpdateRequest'
+            example:
+              name: Armações solares
+      responses:
+        '200':
+          description: Categoria atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Categorias]
+      summary: Atualizar categoria parcialmente
+      description: Requer sessão autenticada e privilégio administrativo. Campos opcionais; o nome deve ser único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedDescriptionUpdateRequest'
+      responses:
+        '200':
+          description: Categoria atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Categorias]
+      summary: Excluir categoria
+      description: Requer sessão autenticada e privilégio administrativo.
+      responses:
+        '200':
+          description: Categoria excluída.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Categoria excluída com sucesso.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/marcas:
+    get:
+      tags: [Marcas]
+      summary: Listar marcas
+      description: Público; coleção sem paginação.
+      responses:
+        '200':
+          description: Lista de marcas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandCollectionResponse'
+    post:
+      tags: [Marcas]
+      summary: Cadastrar marca
+      description: Requer sessão autenticada e privilégio administrativo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedDescriptionCreateRequest'
+            example:
+              name: Lume
+              description: Marca própria
+      responses:
+        '201':
+          description: Marca cadastrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/marcas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Marcas]
+      summary: Consultar marca
+      description: Público.
+      responses:
+        '200':
+          description: Marca encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandDataResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Marcas]
+      summary: Atualizar marca
+      description: Requer sessão autenticada e privilégio administrativo. Campos opcionais; o nome deve ser único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedDescriptionUpdateRequest'
+            example:
+              name: Lume Ótica
+      responses:
+        '200':
+          description: Marca atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Marcas]
+      summary: Atualizar marca parcialmente
+      description: Requer sessão autenticada e privilégio administrativo. Campos opcionais; o nome deve ser único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamedDescriptionUpdateRequest'
+      responses:
+        '200':
+          description: Marca atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Marcas]
+      summary: Excluir marca
+      description: Requer sessão autenticada e privilégio administrativo.
+      responses:
+        '200':
+          description: Marca excluída.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Marca excluída com sucesso.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/publicos:
+    get:
+      tags: [Públicos]
+      summary: Listar públicos-alvo
+      description: Público; coleção sem paginação.
+      responses:
+        '200':
+          description: Lista de públicos-alvo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudienceCollectionResponse'
+    post:
+      tags: [Públicos]
+      summary: Cadastrar público-alvo
+      description: Requer sessão autenticada e privilégio administrativo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudienceCreateRequest'
+            example:
+              name: Infantil
+      responses:
+        '201':
+          description: Público-alvo cadastrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudienceDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/publicos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Públicos]
+      summary: Consultar público-alvo
+      description: Público.
+      responses:
+        '200':
+          description: Público-alvo encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudienceDataResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Públicos]
+      summary: Atualizar público-alvo
+      description: Requer sessão autenticada e privilégio administrativo. Nome único e opcional no corpo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudienceUpdateRequest'
+            example:
+              name: Adulto
+      responses:
+        '200':
+          description: Público-alvo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudienceDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Públicos]
+      summary: Atualizar público-alvo parcialmente
+      description: Requer sessão autenticada e privilégio administrativo. Nome único e opcional no corpo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudienceUpdateRequest'
+      responses:
+        '200':
+          description: Público-alvo atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudienceDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Públicos]
+      summary: Excluir público-alvo
+      description: Requer sessão autenticada e privilégio administrativo.
+      responses:
+        '200':
+          description: Público-alvo excluído.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Público-alvo excluído com sucesso.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/carrinho:
+    get:
+      tags: [Carrinho]
+      summary: Consultar carrinho
+      description: Requer sessão autenticada. Cria o carrinho do usuário se ainda não existir.
+      responses:
+        '200':
+          description: Carrinho e itens atuais.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /api/carrinho/itens:
+    post:
+      tags: [Carrinho]
+      summary: Adicionar produto ao carrinho
+      description: |
+        Requer sessão autenticada. Se o produto já estiver no carrinho, soma
+        a quantidade solicitada à existente. Produto indisponível ou estoque
+        insuficiente retorna erro de negócio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartItemRequest'
+            examples:
+              válido:
+                value:
+                  product_id: 10
+                  quantity: 2
+              inválido:
+                summary: Quantidade menor que o mínimo permitido
+                value:
+                  product_id: 10
+                  quantity: 0
+      responses:
+        '201':
+          description: Produto adicionado e carrinho atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Erro de validação, produto indisponível ou estoque insuficiente.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/MessageError'
+              examples:
+                validação:
+                  value:
+                    message: The given data was invalid.
+                    errors:
+                      quantity: [The quantity field must be at least 1.]
+                indisponível:
+                  value:
+                    message: Produto indisponível.
+                estoque:
+                  value:
+                    message: "Estoque insuficiente. Disponível: 3 unidade(s)."
+  /api/carrinho/itens/{productId}:
+    parameters:
+      - name: productId
+        in: path
+        required: true
+        description: ID numérico do produto.
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+    patch:
+      tags: [Carrinho]
+      summary: Atualizar quantidade de um item
+      description: Requer sessão autenticada. A quantidade deve ser ao menos 1; para remover, use DELETE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemRequest'
+            example:
+              quantity: 3
+      responses:
+        '200':
+          description: Carrinho atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Erro de validação, produto indisponível ou estoque insuficiente.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/MessageError'
+    delete:
+      tags: [Carrinho]
+      summary: Remover item do carrinho
+      description: Requer sessão autenticada.
+      responses:
+        '200':
+          description: Carrinho atualizado após a remoção.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/enderecos:
+    get:
+      tags: [Endereços]
+      summary: Listar endereços do usuário
+      description: Requer sessão autenticada; retorna somente endereços do usuário atual.
+      responses:
+        '200':
+          description: Lista simples de endereços, sem paginação.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressCollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [Endereços]
+      summary: Cadastrar endereço
+      description: Requer sessão autenticada. O usuário é obtido da sessão, não do corpo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressCreateRequest'
+            example:
+              cep: 01310-100
+              street: Avenida Paulista
+              number: '1000'
+              complement: Apto 12
+              neighborhood: Bela Vista
+              city: São Paulo
+              uf: SP
+      responses:
+        '201':
+          description: Endereço cadastrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/enderecos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Endereços]
+      summary: Consultar endereço
+      description: Requer sessão autenticada. Endereços de outros usuários não são expostos e resultam em 404.
+      responses:
+        '200':
+          description: Endereço encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Endereços]
+      summary: Atualizar endereço
+      description: Requer sessão autenticada e propriedade do endereço. Todos os campos são opcionais, mas os campos enviados devem ser válidos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressUpdateRequest'
+            example:
+              number: '1001'
+      responses:
+        '200':
+          description: Endereço atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Endereços]
+      summary: Atualizar endereço parcialmente
+      description: Requer sessão autenticada e propriedade do endereço. Todos os campos são opcionais, mas os campos enviados devem ser válidos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressUpdateRequest'
+      responses:
+        '200':
+          description: Endereço atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Endereços]
+      summary: Excluir endereço
+      description: Requer sessão autenticada e propriedade do endereço.
+      responses:
+        '200':
+          description: Endereço excluído.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Endereço excluído com sucesso.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/pedidos:
+    get:
+      tags: [Pedidos]
+      summary: Listar pedidos do usuário
+      description: Requer sessão autenticada; lista somente os pedidos do usuário atual, sem paginação.
+      responses:
+        '200':
+          description: Lista simples de pedidos com itens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [Pedidos]
+      summary: Finalizar compra
+      description: |
+        Requer sessão autenticada. O endereço precisa pertencer ao usuário.
+        O carrinho não pode estar vazio; produtos indisponíveis ou sem estoque
+        impedem a criação do pedido. A compra reduz estoque e limpa o carrinho.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreOrderRequest'
+            example:
+              address_id: 4
+      responses:
+        '201':
+          description: Pedido criado no status `pending`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          description: Endereço não encontrado para o usuário.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Endereço não encontrado.
+        '422':
+          description: Erro de validação, carrinho vazio, produto indisponível ou estoque insuficiente.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/MessageError'
+              examples:
+                carrinho_vazio:
+                  value:
+                    message: O carrinho está vazio.
+                produto_indisponivel:
+                  value:
+                    message: Produto indisponível.
+  /api/pedidos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Pedidos]
+      summary: Consultar pedido
+      description: Requer sessão autenticada. Pedido de outro usuário ou inexistente retorna 404.
+      responses:
+        '200':
+          description: Pedido encontrado com itens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Pedidos]
+      summary: Cancelar pedido
+      description: Requer sessão autenticada e propriedade do pedido. Somente pedidos `pending` podem ser cancelados; o estoque é reposto.
+      responses:
+        '200':
+          description: Pedido cancelado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Pedido fora do status `pending`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Este pedido não pode ser cancelado.
+  /api/pedidos/{id}/pay:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Pedidos]
+      summary: Pagar pedido
+      description: Requer sessão autenticada e propriedade do pedido. Somente pedidos `pending` aceitam pagamento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayOrderRequest'
+            examples:
+              pix:
+                value:
+                  method: pix
+              cartão:
+                value:
+                  method: credit_card
+              inválido:
+                value:
+                  method: boleto
+      responses:
+        '200':
+          description: Pagamento aprovado; pedido passa para `paid`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayOrderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Pedido não está aguardando pagamento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Este pedido não está aguardando pagamento.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/pedidos/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Pedidos]
+      summary: Atualizar status do pedido
+      description: |
+        Requer sessão autenticada e privilégio administrativo. Transições
+        permitidas: `paid` para `sent` e `sent` para `delivered`; o valor do
+        corpo deve ser `sent` ou `delivered`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderStatusRequest'
+            examples:
+              enviado:
+                value:
+                  status: sent
+              inválido:
+                value:
+                  status: cancelled
+      responses:
+        '200':
+          description: Status atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateOrderStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Transição de status não permitida para o estado atual.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Transição de status inválida.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/perfil:
+    get:
+      tags: [Perfil]
+      summary: Consultar perfil
+      description: Requer sessão autenticada.
+      responses:
+        '200':
+          description: Perfil do usuário atual.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDataResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    put:
+      tags: [Perfil]
+      summary: Atualizar perfil
+      description: Requer sessão autenticada. Campos opcionais; e-mail deve ser único.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            example:
+              name: Ana Maria Silva
+              email: ana.maria@example.com
+      responses:
+        '200':
+          description: Perfil atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/perfil/senha:
+    patch:
+      tags: [Perfil]
+      summary: Alterar senha
+      description: Requer sessão autenticada. `password_confirmation` deve ser igual a `password`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePasswordRequest'
+            examples:
+              válido:
+                value:
+                  current_password: senha-atual
+                  password: senha-nova-123
+                  password_confirmation: senha-nova-123
+              inválido:
+                summary: Confirmação diferente
+                value:
+                  current_password: senha-atual
+                  password: senha-nova-123
+                  password_confirmation: outra-senha
+      responses:
+        '200':
+          description: Senha alterada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Senha alterada com sucesso.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          description: Falha de validação ou senha atual incorreta.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/MessageError'
+              examples:
+                validação:
+                  value:
+                    message: The given data was invalid.
+                    errors:
+                      password: [The password confirmation does not match.]
+                senha_atual:
+                  value:
+                    message: A senha atual está incorreta.
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Identificador numérico do recurso.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  responses:
+    Unauthenticated:
+      description: Sessão ausente ou não autenticada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageError'
+          example:
+            message: Unauthenticated.
+    Forbidden:
+      description: Usuário autenticado sem privilégio administrativo.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageError'
+          example:
+            message: Acesso não autorizado.
+    NotFound:
+      description: Recurso não encontrado ou não acessível pelo usuário atual.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MessageError'
+          example:
+            message: Recurso não encontrado.
+    ValidationError:
+      description: Dados ausentes ou inválidos conforme as regras do endpoint.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+          example:
+            message: The given data was invalid.
+            errors:
+              name: [The name field is required.]
+  schemas:
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    MessageError:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    ValidationError:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+          example: The given data was invalid.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          description: Deve ser único entre usuários.
+        password:
+          type: string
+          minLength: 8
+          format: password
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    User:
+      type: object
+      required: [name, email, type_user]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        type_user:
+          type: string
+          description: Tipo definido pela aplicação; novas contas usam `customer` e o middleware administrativo verifica `admin`.
+    UserDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+    LoginResponse:
+      type: object
+      required: [message, user]
+      properties:
+        message:
+          type: string
+          example: Login realizado com sucesso!
+        user:
+          $ref: '#/components/schemas/User'
+    NamedDescription:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+    NamedDescriptionCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Obrigatório e único no respectivo recurso.
+        description:
+          type: string
+          nullable: true
+          description: Opcional.
+    NamedDescriptionUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Opcional; quando enviado é obrigatório, não vazio e único.
+        description:
+          type: string
+          nullable: true
+          description: Opcional; pode ser nulo.
+    Category:
+      allOf:
+        - $ref: '#/components/schemas/NamedDescription'
+    Brand:
+      allOf:
+        - $ref: '#/components/schemas/NamedDescription'
+    CategoryDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Category'
+    BrandDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Brand'
+    CategoryCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+    BrandCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Brand'
+    Audience:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+    AudienceCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 50
+          description: Obrigatório e único.
+    AudienceUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 50
+          description: Opcional; quando enviado é obrigatório, não vazio e único.
+    AudienceDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Audience'
+    AudienceCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Audience'
+    Product:
+      type: object
+      required: [id, name, description, price, stock_quantity, image, available]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          maxLength: 150
+        description:
+          type: string
+          nullable: true
+        price:
+          type: number
+          format: float
+          minimum: 0
+        stock_quantity:
+          type: integer
+          minimum: 0
+        image:
+          type: string
+          nullable: true
+        available:
+          type: boolean
+        category:
+          description: Incluída quando as relações são carregadas (consulta individual e escrita).
+          allOf:
+            - $ref: '#/components/schemas/Category'
+        brand:
+          description: Incluída quando as relações são carregadas (consulta individual e escrita).
+          allOf:
+            - $ref: '#/components/schemas/Brand'
+        audiences:
+          description: Incluídos quando as relações são carregadas (consulta individual e escrita).
+          type: array
+          items:
+            $ref: '#/components/schemas/Audience'
+    ProductCreateRequest:
+      type: object
+      required: [category_id, brand_id, name, price, stock_quantity, available]
+      properties:
+        category_id:
+          type: integer
+          minimum: 1
+          description: Deve existir em categorias.
+        brand_id:
+          type: integer
+          minimum: 1
+          description: Deve existir em marcas.
+        name:
+          type: string
+          maxLength: 150
+        description:
+          type: string
+          nullable: true
+        price:
+          type: number
+          minimum: 0
+          maximum: 99999999.99
+        stock_quantity:
+          type: integer
+          minimum: 0
+        image:
+          type: string
+          nullable: true
+          maxLength: 255
+        available:
+          type: boolean
+        audience_ids:
+          type: array
+          description: Opcional; cada ID deve existir e não pode se repetir.
+          items:
+            type: integer
+            minimum: 1
+    ProductUpdateRequest:
+      type: object
+      properties:
+        category_id:
+          type: integer
+          minimum: 1
+          description: Deve existir em categorias.
+        brand_id:
+          type: integer
+          minimum: 1
+          description: Deve existir em marcas.
+        name:
+          type: string
+          maxLength: 150
+        description:
+          type: string
+          nullable: true
+        price:
+          type: number
+          minimum: 0
+          maximum: 99999999.99
+        stock_quantity:
+          type: integer
+          minimum: 0
+        image:
+          type: string
+          nullable: true
+          maxLength: 255
+        available:
+          type: boolean
+        audience_ids:
+          type: array
+          description: Se enviado, substitui a associação atual; array vazio remove todos os públicos.
+          items:
+            type: integer
+            minimum: 1
+    ProductDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Product'
+    ProductCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+    Address:
+      type: object
+      required: [id, cep, street, number, complement, neighborhood, city, uf]
+      properties:
+        id:
+          type: integer
+          format: int64
+        cep:
+          type: string
+          maxLength: 9
+        street:
+          type: string
+          maxLength: 150
+        number:
+          type: string
+          maxLength: 10
+        complement:
+          type: string
+          nullable: true
+          maxLength: 100
+        neighborhood:
+          type: string
+          maxLength: 100
+        city:
+          type: string
+          maxLength: 150
+        uf:
+          type: string
+          minLength: 2
+          maxLength: 2
+    AddressCreateRequest:
+      type: object
+      required: [cep, street, number, neighborhood, city, uf]
+      properties:
+        cep:
+          type: string
+          maxLength: 9
+        street:
+          type: string
+          maxLength: 150
+        number:
+          type: string
+          maxLength: 10
+        complement:
+          type: string
+          nullable: true
+          maxLength: 100
+        neighborhood:
+          type: string
+          maxLength: 100
+        city:
+          type: string
+          maxLength: 150
+        uf:
+          type: string
+          minLength: 2
+          maxLength: 2
+    AddressUpdateRequest:
+      type: object
+      properties:
+        cep:
+          type: string
+          maxLength: 9
+        street:
+          type: string
+          maxLength: 150
+        number:
+          type: string
+          maxLength: 10
+        complement:
+          type: string
+          nullable: true
+          maxLength: 100
+        neighborhood:
+          type: string
+          maxLength: 100
+        city:
+          type: string
+          maxLength: 150
+        uf:
+          type: string
+          minLength: 2
+          maxLength: 2
+    AddressDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Address'
+    AddressCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+    CartItem:
+      type: object
+      required: [id, quantity, product]
+      properties:
+        id:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+        product:
+          $ref: '#/components/schemas/Product'
+    Cart:
+      type: object
+      required: [id, items]
+      properties:
+        id:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+    CartDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Cart'
+    AddCartItemRequest:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id:
+          type: integer
+          minimum: 1
+          description: Deve existir em produtos.
+        quantity:
+          type: integer
+          minimum: 1
+    UpdateCartItemRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+    OrderItem:
+      type: object
+      required: [product_id, product_name, price, quantity]
+      properties:
+        product_id:
+          type: integer
+          format: int64
+        product_name:
+          type: string
+        price:
+          type: number
+          format: float
+        quantity:
+          type: integer
+    OrderAddress:
+      type: object
+      required: [street, number, cep, neighborhood, city, uf, complement]
+      properties:
+        street:
+          type: string
+        number:
+          type: string
+        cep:
+          type: string
+        neighborhood:
+          type: string
+        city:
+          type: string
+        uf:
+          type: string
+        complement:
+          type: string
+          nullable: true
+    Order:
+      type: object
+      required: [id, status, total_amount, ordered_at, paid_at, address, items]
+      properties:
+        id:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [pending, paid, sent, delivered, cancelled]
+        total_amount:
+          type: number
+          format: float
+        ordered_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        address:
+          $ref: '#/components/schemas/OrderAddress'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+    OrderDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Order'
+    OrderCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+    StoreOrderRequest:
+      type: object
+      required: [address_id]
+      properties:
+        address_id:
+          type: integer
+          minimum: 1
+          description: Deve existir e pertencer ao usuário autenticado.
+    PayOrderRequest:
+      type: object
+      required: [method]
+      properties:
+        method:
+          type: string
+          enum: [pix, credit_card]
+    PayOrderResponse:
+      type: object
+      required: [message, order]
+      properties:
+        message:
+          type: string
+          example: Pagamento aprovado com sucesso.
+        order:
+          $ref: '#/components/schemas/Order'
+    UpdateOrderStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [sent, delivered]
+    UpdateOrderStatusResponse:
+      type: object
+      required: [message, order]
+      properties:
+        message:
+          type: string
+          example: Status do pedido atualizado com sucesso!
+        order:
+          $ref: '#/components/schemas/Order'
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: Deve ser único entre os demais usuários.
+    UpdateProfileResponse:
+      type: object
+      required: [message, user]
+      properties:
+        message:
+          type: string
+          example: Perfil atualizado com sucesso.
+        user:
+          $ref: '#/components/schemas/User'
+    UpdatePasswordRequest:
+      type: object
+      required: [current_password, password, password_confirmation]
+      properties:
+        current_password:
+          type: string
+          format: password
+        password:
+          type: string
+          format: password
+          minLength: 8
+        password_confirmation:
+          type: string
+          format: password
+          description: Deve ser exatamente igual a `password`.

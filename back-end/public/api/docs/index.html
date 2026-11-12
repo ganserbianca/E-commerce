@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentação da API | Lume Ótica</title>
+  <link rel="icon" type="image/png" href="/api/docs/assets/favicon-32x32.png" sizes="32x32">
+  <link rel="stylesheet" href="/api/docs/assets/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="/api/docs/assets/swagger-ui-bundle.js"></script>
+  <script src="/api/docs/assets/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function () {
+      window.ui = SwaggerUIBundle({
+        url: "/api/docs/openapi.yaml",
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout",
+        withCredentials: true,
+        requestInterceptor: async function (request) {
+          request.credentials = "include";
+
+          const method = (request.method || "GET").toUpperCase();
+          if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+            const csrfResponse = await fetch("/sanctum/csrf-cookie", {
+              method: "GET",
+              credentials: "include",
+              headers: { "Accept": "application/json" }
+            });
+
+            if (!csrfResponse.ok) {
+              throw new Error("Não foi possível iniciar a sessão CSRF.");
+            }
+
+            const xsrfCookie = document.cookie
+              .split("; ")
+              .find(function (cookie) {
+                return cookie.startsWith("XSRF-TOKEN=");
+              });
+
+            if (!xsrfCookie) {
+              throw new Error("O cookie XSRF-TOKEN não foi definido.");
+            }
+
+            request.headers = request.headers || {};
+            request.headers["X-XSRF-TOKEN"] = decodeURIComponent(
+              xsrfCookie.slice("XSRF-TOKEN=".length)
+            );
+          }
+
+          return request;
+        }
+      });
+    };
+  </script>
+</body>
+</html>
